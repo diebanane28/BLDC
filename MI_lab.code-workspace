@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "../../../stm/MI_lab"
+		},
+		{
+			"path": "../../../stm/git/stm32-bldc-driver/src"
+		},
+		{
+			"name": "bldc",
+			"path": "."
+		}
+	],
+	"settings": {}
+}

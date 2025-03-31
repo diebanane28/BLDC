@@ -1,4 +1,8 @@
 #include "stm32f4xx_hal.h"
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <cstring>
 
 /////////////////////////////////////////////////////////////////////
 //  Aktueller Stand:
@@ -6,6 +10,9 @@
 //  Getestet drei leds blinken
 //  Sys_clk ganz unten noch unklar?
 ////////////////////////////////////////////////////////////////////
+
+//globale Variable
+int counter =0;
 
 
 // PWM Timer und Kanal-Konfiguration
@@ -19,6 +26,22 @@ void SystemClock_Config(void);
 void GPIO_Init(void);
 void TIM3_Init(void);
 
+//weitere funktionen
+void delay(int delaytime);
+//diese gleich hier implementiert weil kompliziert zu deklarieren...
+//////////////////////////////////////////////////////////////////////////
+const int table_length = 256;
+const std::array<int, table_length> fastCos = [] {
+    std::array<int, table_length> arr{};
+    for (std::size_t i = 0; i < table_length; i++) {
+        double x = (static_cast<double>(i) / table_length) * 2 * M_PI;  // x von 0 bis 2π
+        arr[i] = static_cast<int>(std::round(128 * cos(x) + 128));  // Wert berechnen & runden
+    }
+    return arr;
+}();
+///////////////////////////////////////////////////////////////////////////
+
+
 int main(void) {
     HAL_Init();               // HAL Bibliothek initialisieren
     GPIO_Init();              // GPIO Pins initialisieren
@@ -29,8 +52,15 @@ int main(void) {
     PWM_Init(&htim3, TIM_CHANNEL_2);
     PWM_Init(&htim3, TIM_CHANNEL_3);
 
+    
     while (1) {
         // Endlosschleife
+        while(counter<256) {
+        TIM3->CCR1 = fastCos[counter];   //Capture-Compare-Register toggelt den Pin CCR1 = channel1
+        delay(500);
+        counter++;
+        }
+        counter =0;
     }
 }
 
@@ -67,7 +97,7 @@ void TIM3_Init(void) {
     htim3.Instance = TIM3;
     htim3.Init.Prescaler = 15999;  // Prescaler, um 1 kHz Zählerfrequenz zu erreichen################IST WIRKLICH 84MHZ?!?!?
     htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim3.Init.Period = 999;  // PWM Frequenz = 1 Hz
+    htim3.Init.Period = 256;  // PWM Frequenz = ausrechnen wenn interesse
     htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
     
@@ -78,4 +108,11 @@ void TIM3_Init(void) {
 
 extern "C" 
     void SysTick_Handler(void) { HAL_IncTick(); }
-    
+
+
+void delay(int delaytime) {
+    int i = 0;
+    while (i<delaytime) {
+        i++;
+    }
+}

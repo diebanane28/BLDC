@@ -3,6 +3,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstring>
+#define SYSTEMTAKT 10e6 //  1 MHz Taktfrequenz am PeripheralBUS wo TIM3 für PWM 
+#define TOTAL_ACCELERATION_LOOPS 1000 //totale anzahl an beschleun.-loops => kleiner = schnellerer anlauf
+
 
 /////////////////////////////////////////////////////////////////////
 //  Aktueller Stand:
@@ -13,7 +16,8 @@
 
 //globale Variable
 int counter =0;
-
+int total_pole_loops =0;
+const int tim3_prescaler = (16*10e6 / SYSTEMTAKT)-1;
 
 // PWM Timer und Kanal-Konfiguration
 TIM_HandleTypeDef htim3;  // Timer 3 wird für PWM verwendet
@@ -28,9 +32,10 @@ void TIM3_Init(void);
 
 //weitere funktionen
 void delay(int delaytime);
+int startup_ramp_times(int startvalue, int endvalue, int loops, int acc_slower);
 //diese gleich hier implementiert weil kompliziert zu deklarieren...
 //////////////////////////////////////////////////////////////////////////
-const int table_length = 256;
+const int table_length = 512;
 const std::array<int, table_length> fastCos = [] {
     std::array<int, table_length> arr{};
     for (std::size_t i = 0; i < table_length; i++) {
@@ -55,9 +60,16 @@ int main(void) {
     
     while (1) {
         // Endlosschleife
+        if (total_pole_loops < TOTAL_ACCELERATION_LOOPS) {  //  hier zb 1000 Poleloops bis volle Geschwindigkeit erreicht
+                                        //  ab dann weiterzählen sinnlos...nur overflow gefahr
+            total_pole_loops++; //counts the pole loops
+        }
+        
         while(counter<256) {
         TIM3->CCR1 = fastCos[counter];   //Capture-Compare-Register toggelt den Pin CCR1 = channel1
-        delay(500);
+        TIM3->CCR2 = fastCos[counter+85]; //-120° Phasenverschub
+        TIM3->CCR3 = fastCos[counter+171]; //-240° Phasenverschub
+        delay(startup_ramp_times(20000, 400, total_pole_loops, 1));
         counter++;
         }
         counter =0;
@@ -95,9 +107,9 @@ void TIM3_Init(void) {
     __HAL_RCC_TIM3_CLK_ENABLE(); // Takt für Timer 3 aktivieren
     
     htim3.Instance = TIM3;
-    htim3.Init.Prescaler = 15999;  // Prescaler, um 1 kHz Zählerfrequenz zu erreichen################IST WIRKLICH 84MHZ?!?!?
+    htim3.Init.Prescaler = tim3_prescaler;  // Takt siehe #define SYSTEMTAKT (aktuell 1 MHz)
     htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim3.Init.Period = 256;  // PWM Frequenz = ausrechnen wenn interesse
+    htim3.Init.Period = 256;  // PWM Frequenz = SYSTEMTAKT / 256 = ca 3,90 kHz
     htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
     
@@ -115,4 +127,14 @@ void delay(int delaytime) {
     while (i<delaytime) {
         i++;
     }
+}
+
+int startup_ramp_times(int startvalue, int endvalue, int loops, int acc_slower) {
+    // total loops bis endvalue: 1000
+    // start drehzahl = 0,2 U/s => start_delay = 20 000 Ticks bei 1 MHz
+    // beschleunigung = 1 U/s^2
+    // enddrehzahl = 10 U/s => end_delay = 400 Ticks bei 1 MHz
+
+    return std::round(acc_slower*(startvalue-endvalue)/(loops) + endvalue);
+     
 }
